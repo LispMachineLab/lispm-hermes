@@ -1,0 +1,52 @@
+#+title: LispM Hermes
+
+#+HTML: <p align="center"><a href="https://github.com/LispMachineLab/lispm-hermes/actions/workflows/test.yml"><img src="https://github.com/LispMachineLab/lispm-hermes/actions/workflows/test.yml/badge.svg" alt="test" /></a></p>
+
+[[https://github.com/NousResearch/hermes-agent][Hermes]], Nous Research's agent, as one of the
+agents of [[https://github.com/LispMachineLab/lispm-desktop][LispM Desktop]]'s editor.  The editor
+ships with LispM's own agent, Claude Code and Codex; Hermes is an extension, which the App Store
+installs from its Extensions.  In code, the prefix is ~lispm-hermes-~.
+
+* What it does
+
+While ~hermes~ is on ~PATH~, Hermes takes part in the editor as the agents built into it do:
+
+- =C-c a h=, =h= in the agents sidebar, its button there and /New Hermes Session/ in the λ menu
+  start Hermes, in a terminal, at the current project's root.
+- Its sessions join the others in the agents sidebar and in =C-c a s=, grouped by project, and
+  resume where they ran.  They are read from Hermes's own store, =~/.hermes/state.db=, again only
+  when it changed; renaming, deleting and opening a transcript go through the ~hermes~ command,
+  as the store is Hermes's.
+- =C-c a r= puts the region, with where it is, into a running Hermes's input.
+- It sees what only Emacs knows: the selection, the files open and unsaved, Flymake's
+  diagnostics, over MCP.  Each terminal gets a server of its own, reached through this package's
+  bridge, =bin/emacs-mcp=, which Hermes's config names once as its server ~emacs~:
+  =M-x lispm-hermes-setup= has Hermes add it (answer yes when it asks to save a server that offers
+  no tools outside a terminal).
+
+Without ~hermes~ on ~PATH~, Hermes shows nowhere, and the App Store greys it out with the command
+installing it.
+
+* Installation
+
+From LispM Desktop's App Store: Extensions, Hermes, Get.  Removing it there takes Hermes away
+from the editor at once; its sessions stay in Hermes's store.
+
+By hand, from a checkout, in an Emacs running LispM Desktop:
+
+#+begin_src emacs-lisp
+(add-to-list 'load-path "~/src/lispm-hermes")
+(require 'lispm-hermes)
+#+end_src
+
+* Tests
+
+#+begin_src sh
+make test LISPM_DESKTOP=../lispm-desktop/lisp
+#+end_src
+
+They need neither Hermes nor its store.
+
+* License
+
+GNU Affero General Public License, version 3 or later; see [[file:LICENSE][LICENSE]].
