@@ -129,11 +129,26 @@ file only its owner can read, removed when the server stops."
 
 (ert-deftest lispm-hermes-test-unloading-takes-it-away ()
   "Unloading the package, as the App Store does removing it, takes Hermes
-away from the agents; loading it again brings it back."
-  (unload-feature 'lispm-hermes t)
-  (unwind-protect
-      (should-not (assq 'hermes lispm-desktop-agents))
-    (require 'lispm-hermes))
+away from the agents and stops the servers of its running terminals,
+their token files removed; loading it again brings it back."
+  (let* ((lispm-hermes-token-directory (make-temp-file "lispm-hermes-test-tokens" t))
+         (lispm-hermes-config-file "/nonexistent/config.yaml")
+         (inhibit-message t)
+         (terminal (get-buffer-create " *lispm-hermes-test terminal*"))
+         (server (lispm-hermes--context temporary-file-directory))
+         (file (lispm-hermes--token-file server)))
+    (unwind-protect
+        (progn
+          (with-current-buffer terminal (setq lispm-desktop-agent-buffer-agent 'hermes))
+          (lispm-desktop-agent-context-bind server terminal)
+          (unload-feature 'lispm-hermes t)
+          (should-not (assq 'hermes lispm-desktop-agents))
+          (should-not (process-live-p (lispm-desktop-agent-mcp-server server)))
+          (should-not (file-exists-p file))
+          (should (buffer-live-p terminal)))
+      (require 'lispm-hermes)
+      (kill-buffer terminal)
+      (delete-directory lispm-hermes-token-directory t)))
   (should (assq 'hermes lispm-desktop-agents)))
 
 (provide 'lispm-hermes-test)
