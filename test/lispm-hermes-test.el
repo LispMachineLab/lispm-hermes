@@ -23,7 +23,7 @@
 
 ;;; Commentary:
 
-;; Run with `make test', LispM Desktop's lisp/ on the load path.  They need
+;; Run with `make test', lispm-agent's lisp/ on the load path.  They need
 ;; neither Hermes nor its store: the store is made up when read.
 
 ;;; Code:
@@ -34,17 +34,17 @@
 (ert-deftest lispm-hermes-test-defined-on-load ()
   "Loaded, Hermes is one of the editor's agents, taking part while its
 command is on PATH, started with h."
-  (let ((props (alist-get 'hermes lispm-desktop-agents)))
+  (let ((props (alist-get 'hermes lispm-agents-defined)))
     (should (equal (plist-get props :name) "Hermes"))
     (should (equal (plist-get props :program) "hermes"))
     (should (equal (plist-get props :key) "h"))
     (should-not (plist-get props :built-in))
     (should (file-readable-p (nth 1 (plist-get props :icon)))))
   (cl-letf (((symbol-function 'executable-find) #'ignore))
-    (should-not (lispm-desktop-agent-available-p 'hermes)))
+    (should-not (lispm-agents-available-p 'hermes)))
   (cl-letf (((symbol-function 'executable-find) (lambda (program &rest _) (concat "/bin/" program))))
-    (should (lispm-desktop-agent-available-p 'hermes))
-    (should (eq (keymap-lookup lispm-desktop-agent-map "h") 'lispm-hermes-new))))
+    (should (lispm-agents-available-p 'hermes))
+    (should (eq (keymap-lookup lispm-agents-map "h") 'lispm-hermes-new))))
 
 (ert-deftest lispm-hermes-test-sessions-from-rows ()
   "A row of the store is a session titled by Hermes, else by its first
@@ -118,13 +118,13 @@ file only its owner can read, removed when the server stops."
         (progn
           (should (lispm-hermes-mcp-p server))
           (should (equal (with-temp-buffer (insert-file-contents file) (buffer-string))
-                         (lispm-desktop-agent-mcp-token server)))
+                         (lispm-agents-mcp-token server)))
           (should (= (file-modes file) #o600))
           (should (member (format "LISPM_HERMES_MCP_TOKEN_FILE=%s" file)
-                          (lispm-desktop-agent-context-environment server)))
-          (lispm-desktop-agent-context-stop server)
+                          (lispm-agents-context-environment server)))
+          (lispm-agents-context-stop server)
           (should-not (file-exists-p file)))
-      (ignore-errors (lispm-desktop-agent-context-stop server))
+      (ignore-errors (lispm-agents-context-stop server))
       (delete-directory lispm-hermes-token-directory t))))
 
 (ert-deftest lispm-hermes-test-unloading-takes-it-away ()
@@ -139,17 +139,17 @@ their token files removed; loading it again brings it back."
          (file (lispm-hermes--token-file server)))
     (unwind-protect
         (progn
-          (with-current-buffer terminal (setq lispm-desktop-agent-buffer-agent 'hermes))
-          (lispm-desktop-agent-context-bind server terminal)
+          (with-current-buffer terminal (setq lispm-agents-buffer-agent 'hermes))
+          (lispm-agents-context-bind server terminal)
           (unload-feature 'lispm-hermes t)
-          (should-not (assq 'hermes lispm-desktop-agents))
-          (should-not (process-live-p (lispm-desktop-agent-mcp-server server)))
+          (should-not (assq 'hermes lispm-agents-defined))
+          (should-not (process-live-p (lispm-agents-mcp-server server)))
           (should-not (file-exists-p file))
           (should (buffer-live-p terminal)))
       (require 'lispm-hermes)
       (kill-buffer terminal)
       (delete-directory lispm-hermes-token-directory t)))
-  (should (assq 'hermes lispm-desktop-agents)))
+  (should (assq 'hermes lispm-agents-defined)))
 
 (provide 'lispm-hermes-test)
 ;;; lispm-hermes-test.el ends here
