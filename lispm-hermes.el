@@ -1,4 +1,4 @@
-;;; lispm-hermes.el --- Hermes, an agent of LispM Desktop's editor  -*- lexical-binding: t; -*-
+;;; lispm-hermes.el --- Hermes, one of the editor's agents  -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2026  Ryan.K
 
@@ -26,19 +26,20 @@
 
 ;;; Commentary:
 
-;; Hermes, Nous Research's agent, as one of the agents of LispM Desktop's
-;; editor: an extension its App Store installs.  Loading this file makes
-;; Hermes an agent (`lispm-desktop-agent-define'); unloading it, as the
-;; App Store does when it removes it, takes it away again.  It takes part
-;; while `hermes' is on PATH: C-c a h, or h in the agents sidebar, starts
-;; it in the current project, and its sessions join the others.
+;; Hermes, Nous Research's agent, as one of the editor's agents of LispM
+;; Agent (lispm-agents.el), beside Claude Code and Codex: a package of its
+;; own, which LispM Desktop's App Store installs.  Loading this file makes
+;; Hermes an agent (`lispm-agents-define'); unloading it, as the App Store
+;; does when it removes it, takes it away again.  It takes part while
+;; `hermes' is on PATH: h in `lispm-agents-map' starts it in the current
+;; project, and its sessions join the others.
 ;;
 ;; - Its sessions are read from Hermes's SQLite store, ~/.hermes/state.db,
 ;;   in one query, again only when the store or its write-ahead log
 ;;   changed.  The store is Hermes's own: renaming, deleting and exporting
 ;;   a session go through the `hermes' command.
 ;; - It sees Emacs's state through an MCP server per terminal
-;;   (lispm-desktop-agent-mcp.el).  Hermes takes MCP servers from its
+;;   (lispm-agents-mcp.el).  Hermes takes MCP servers from its
 ;;   config file alone, so this package's stdio bridge, bin/emacs-mcp, is
 ;;   named there once, as the server `emacs' (`lispm-hermes-setup'); each
 ;;   terminal then hands the bridge its server's address and a token file:
@@ -55,11 +56,9 @@
 (require 'cl-lib)
 (require 'seq)
 (require 'subr-x)
-(require 'lispm-desktop-ai)
-(require 'lispm-desktop-agent-mcp)
+(require 'lispm-agents)
+(require 'lispm-agents-mcp)
 
-(declare-function lispm-desktop-terminal-make "lispm-desktop-term" (name program &rest args))
-(declare-function lispm-desktop-agent-image-icon "lispm-desktop-agent-list" (file &rest args))
 
 (defconst lispm-hermes-directory
   (file-name-directory (or load-file-name buffer-file-name))
@@ -108,19 +107,19 @@ compressing it.  %s takes a placeholder per listed source.")
   "Return the prompt a person typed in Hermes message CONTENT, or nil.
 CONTENT is text, or a JSON array of typed parts when it carried images."
   (let ((text (if (and (stringp content) (string-prefix-p "[" content))
-                  (lispm-desktop-agent-content-text
+                  (lispm-agents-content-text
                    (ignore-errors
                      (json-parse-string content :object-type 'plist :array-type 'list
                                         :null-object nil :false-object nil)))
                 content)))
-    (and (lispm-desktop-agent-human-text-p text) text)))
+    (and (lispm-agents-human-text-p text) text)))
 
 (defun lispm-hermes--session (row)
   "Return the Hermes session of ROW, a row of `lispm-hermes-query'.
 Its title is the one Hermes gave or was given, else the first prompt; its
 directory is the recorded one, else the repository, else home, which makes
 it a chat.  Its :started time ties a freshly started terminal to it, see
-`lispm-desktop-agent--claim-sessions'.  Return nil for a session with no
+`lispm-agents-claim-sessions'.  Return nil for a session with no
 title and no prompt."
   (pcase-let ((`(,id ,cwd ,root ,title ,started ,last ,content) row))
     (when-let* ((title (or (and (stringp title) (not (string-blank-p title)) title)
@@ -160,7 +159,7 @@ Return nil without the store, or without SQLite in this Emacs."
 
 (defun lispm-hermes--stamp ()
   "Return the modification times of Hermes's store and its write-ahead log."
-  (mapcar (lambda (file) (and (file-exists-p file) (lispm-desktop-agent-file-time file)))
+  (mapcar (lambda (file) (and (file-exists-p file) (lispm-agents-file-time file)))
           (list lispm-hermes-state-file (concat lispm-hermes-state-file "-wal"))))
 
 (defun lispm-hermes-sessions ()
@@ -208,13 +207,13 @@ store to Markdown in a fresh temporary directory."
 
 ;;;; Emacs's state, over MCP
 
-(cl-defstruct (lispm-hermes-mcp (:include lispm-desktop-agent-mcp)
+(cl-defstruct (lispm-hermes-mcp (:include lispm-agents-mcp)
                                 (:constructor lispm-hermes-mcp--make))
   "The MCP server of a Hermes terminal.")
 
 (defun lispm-hermes--token-file (server)
   "Return the file holding SERVER's token for the bridge."
-  (expand-file-name (format "%d.token" (lispm-desktop-agent-mcp-port server))
+  (expand-file-name (format "%d.token" (lispm-agents-mcp-port server))
                     lispm-hermes-token-directory))
 
 (defun lispm-hermes--write-token-file (server)
@@ -226,15 +225,15 @@ permissions it had."
       (make-directory lispm-hermes-token-directory t))
     (ignore-errors (delete-file file))
     (with-file-modes #o600
-      (write-region (lispm-desktop-agent-mcp-token server) nil file nil 'silent))))
+      (write-region (lispm-agents-mcp-token server) nil file nil 'silent))))
 
-(cl-defmethod lispm-desktop-agent-context-environment ((server lispm-hermes-mcp))
+(cl-defmethod lispm-agents-context-environment ((server lispm-hermes-mcp))
   "Point the bridge Hermes runs at SERVER and its token file.
 The bridge reaches loopback without a proxy on its own."
-  (list (format "LISPM_HERMES_MCP_URL=http://127.0.0.1:%d/mcp" (lispm-desktop-agent-mcp-port server))
+  (list (format "LISPM_HERMES_MCP_URL=http://127.0.0.1:%d/mcp" (lispm-agents-mcp-port server))
         (format "LISPM_HERMES_MCP_TOKEN_FILE=%s" (lispm-hermes--token-file server))))
 
-(cl-defmethod lispm-desktop-agent-context-stop ((server lispm-hermes-mcp))
+(cl-defmethod lispm-agents-context-stop ((server lispm-hermes-mcp))
   "Stop SERVER and remove its token file."
   (cl-call-next-method)
   (ignore-errors (delete-file (lispm-hermes--token-file server))))
@@ -266,7 +265,7 @@ Hermes's to write, see `lispm-hermes-setup'."
   "Serve Emacs's state to a Hermes terminal running in DIRECTORY.
 Hermes sees it only once its config names the bridge, which is said when
 it does not."
-  (let ((server (lispm-desktop-agent-mcp-start "hermes-mcp" #'lispm-hermes-mcp--make directory)))
+  (let ((server (lispm-agents-mcp-start "hermes-mcp" #'lispm-hermes-mcp--make directory)))
     (lispm-hermes--write-token-file server)
     (pcase (lispm-hermes-configured)
       ('this)
@@ -295,8 +294,8 @@ Emacs then sees Emacs's state."
   (unless (executable-find lispm-hermes-program)
     (user-error "Hermes is not installed: `%s' is not on PATH" lispm-hermes-program))
   (pop-to-buffer
-   (let ((process-environment (lispm-desktop-agent-independent-environment process-environment)))
-     (apply #'lispm-desktop-terminal-make "hermes setup" lispm-hermes-program
+   (let ((process-environment (lispm-agents-independent-environment process-environment)))
+     (apply #'lispm-agents-terminal-make "hermes setup" lispm-hermes-program
             (lispm-hermes-setup-arguments)))))
 
 ;;;; The agent
@@ -304,13 +303,13 @@ Emacs then sees Emacs's state."
 (defun lispm-hermes-new ()
   "Start a new Hermes session at the current project root."
   (interactive)
-  (lispm-desktop-agent-new 'hermes))
+  (lispm-agents-new 'hermes))
 
-(lispm-desktop-agent-define
+(lispm-agents-define
  'hermes
  :name "Hermes"
  ;; The Hermes desktop app's icon, the girl with the N choker.
- :icon `(lispm-desktop-agent-image-icon ,(expand-file-name "icons/hermes.png" lispm-hermes-directory) nil)
+ :icon `(lispm-agents-image-icon ,(expand-file-name "icons/hermes.png" lispm-hermes-directory) nil)
  :command #'lispm-hermes-new
  :key "h"
  :program lispm-hermes-program
@@ -325,7 +324,7 @@ Emacs then sees Emacs's state."
 
 (defun lispm-hermes-unload-function ()
   "Take Hermes away from the editor's agents, as this package is unloaded."
-  (lispm-desktop-agent-undefine 'hermes)
+  (lispm-agents-undefine 'hermes)
   ;; Unloading goes on as usual.
   nil)
 
