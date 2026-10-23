@@ -50,6 +50,9 @@
 ;;   Hermes passes its environment on to the commands it runs, so the
 ;;   token is written to a file readable by its owner only, and only the
 ;;   file's name travels in the environment.
+;; - It waits for its user's next message when its session's last message,
+;;   in the store, is its answer: other agents' messages then reach it
+;;   (`lispm-hermes--ready-p').
 
 ;;; Code:
 
@@ -205,6 +208,34 @@ store to Markdown in a fresh temporary directory."
     (or (car (directory-files directory t "\\.md\\'"))
         (user-error "Hermes exported nothing for session %s" (plist-get session :id)))))
 
+;;;; Waiting for its user
+
+(defconst lispm-hermes-last-message-query
+  "WITH RECURSIVE line(id) AS
+     (SELECT ? UNION SELECT s.id FROM sessions s JOIN line ON s.parent_session_id = line.id)
+   SELECT m.role, m.finish_reason, m.tool_calls IS NOT NULL FROM messages m
+    WHERE m.session_id IN (SELECT id FROM line) AND m.active = 1
+      AND m.role IN ('user', 'assistant', 'tool')
+    ORDER BY m.timestamp DESC, m.id DESC LIMIT 1"
+  "Query of the last message of a session, carried on after compressions:
+its role, why it finished, and whether it calls tools.")
+
+(declare-function lispm-agents-terminal-session-id "lispm-agents" (terminal))
+
+(defun lispm-hermes--ready-p (terminal)
+  "Return non-nil when the Hermes of TERMINAL waits for its user's next
+message: the last message of its session is its answer, calling no tools.
+Hermes records the session once its first message is sent."
+  (when-let* (((fboundp 'lispm-agents-terminal-session-id))
+              (id (lispm-agents-terminal-session-id terminal))
+              ((sqlite-available-p))
+              ((file-readable-p lispm-hermes-state-file)))
+    (let ((db (sqlite-open lispm-hermes-state-file)))
+      (unwind-protect
+          (pcase (car (sqlite-select db lispm-hermes-last-message-query (list id)))
+            (`("assistant" ,(or "stop" "length") 0) t))
+        (sqlite-close db)))))
+
 ;;;; Emacs's state, over MCP
 
 (cl-defstruct (lispm-hermes-mcp (:include lispm-agents-mcp)
@@ -320,7 +351,8 @@ Emacs then sees Emacs's state."
  :short-id #'lispm-hermes--short-id
  :new-arguments (lambda () (cons nil (list "chat")))
  :resume-arguments (lambda (id) (list "chat" "--resume" id))
- :context #'lispm-hermes--context)
+ :context #'lispm-hermes--context
+ :ready #'lispm-hermes--ready-p)
 
 (defun lispm-hermes-unload-function ()
   "Take Hermes away from the editor's agents, as this package is unloaded."

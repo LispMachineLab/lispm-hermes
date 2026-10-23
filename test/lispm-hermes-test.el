@@ -63,6 +63,44 @@ session without a directory is a chat at home."
   (should-not (lispm-hermes--session '("i" "/src" nil nil 10.0 nil "<context>")))
   (should (equal (lispm-hermes--short-id "20261020_080000_ab12cd") "ab12cd")))
 
+(ert-deftest lispm-hermes-test-ready-when-it-answered ()
+  "Hermes waits for its user once its session's last message is its answer;
+not while it calls tools or a tool answers, nor before its session is
+recorded.  A session carried on after compression is followed."
+  (skip-unless (and (sqlite-available-p) (fboundp 'lispm-agents-terminal-session-id)))
+  (let* ((lispm-hermes-state-file (make-temp-file "lispm-hermes-test" nil ".db"))
+         (terminal (generate-new-buffer " *hermes:lispm-hermes-test*"))
+         (db (sqlite-open lispm-hermes-state-file))
+         (message (lambda (session role &optional finish calls)
+                    (sqlite-execute db "INSERT INTO messages (session_id, role, finish_reason, tool_calls, timestamp, active)
+                                        VALUES (?, ?, ?, ?, (SELECT count(*) FROM messages), 1)"
+                                    (list session role finish calls)))))
+    (unwind-protect
+        (progn
+          (sqlite-execute db "CREATE TABLE sessions (id TEXT PRIMARY KEY, parent_session_id TEXT)")
+          (sqlite-execute db "CREATE TABLE messages (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT,
+                              role TEXT, finish_reason TEXT, tool_calls TEXT, timestamp REAL, active INTEGER)")
+          (sqlite-execute db "INSERT INTO sessions VALUES ('a', NULL), ('b', 'a')")
+          (cl-letf (((symbol-function 'lispm-agents-sessions-list) #'ignore))
+            (should-not (lispm-hermes--ready-p terminal))
+            (with-current-buffer terminal (setq lispm-agents-buffer-session-id "a"))
+            (funcall message "a" "user")
+            (should-not (lispm-hermes--ready-p terminal))
+            (funcall message "a" "assistant" "tool_calls" "[{}]")
+            (should-not (lispm-hermes--ready-p terminal))
+            (funcall message "a" "tool")
+            (should-not (lispm-hermes--ready-p terminal))
+            (funcall message "a" "assistant" "stop")
+            (should (lispm-hermes--ready-p terminal))
+            ;; Compressed into b, the session goes on there.
+            (funcall message "b" "user")
+            (should-not (lispm-hermes--ready-p terminal))
+            (funcall message "b" "assistant" "stop")
+            (should (lispm-hermes--ready-p terminal))))
+      (sqlite-close db)
+      (kill-buffer terminal)
+      (delete-file lispm-hermes-state-file))))
+
 (ert-deftest lispm-hermes-test-sessions-reread-when-the-store-changes ()
   "The store is read again only when it or its write-ahead log changed."
   (let ((lispm-hermes--cache nil)
