@@ -34,6 +34,12 @@
 ;; `hermes' is on PATH: h in `lispm-agents-map' starts it in the current
 ;; project, and its sessions join the others.
 ;;
+;; It needs lispm-agent 0.7.0 or later (the package `lispm'), which LispM
+;; Desktop loads before it.  Package-Requires leaves it out on purpose:
+;; package.el would not activate this package where lispm-agent is a
+;; checkout on the load path rather than a package, or a package of an
+;; older version, and it could not be loaded at all.
+;;
 ;; - Its sessions are read from Hermes's SQLite store, ~/.hermes/state.db,
 ;;   in one query, again only when the store or its write-ahead log
 ;;   changed.  The store is Hermes's own: renaming, deleting and exporting
