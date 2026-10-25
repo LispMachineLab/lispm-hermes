@@ -189,5 +189,14 @@ their token files removed; loading it again brings it back."
       (delete-directory lispm-hermes-token-directory t)))
   (should (assq 'hermes lispm-agents-defined)))
 
+(ert-deftest lispm-hermes-test-knows-no-desktop ()
+  "Hermes's extension stands alone beside lispm-agent: none of its files
+but the tests names LispM Desktop's code."
+  (dolist (file (directory-files (file-name-directory (locate-library "lispm-hermes")) t "\\.el\\'"))
+    (with-temp-buffer
+      (insert-file-contents file)
+      (should-not (and (re-search-forward "lispm-desktop\\|platinum" nil t)
+                       (format "%s:%d" (file-name-nondirectory file) (line-number-at-pos)))))))
+
 (provide 'lispm-hermes-test)
 ;;; lispm-hermes-test.el ends here
