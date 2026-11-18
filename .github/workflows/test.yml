@@ -23,12 +23,7 @@ jobs:
         with:
           repository: LispMachineLab/lispm-agent
           path: .deps/lispm-agent
-      # LispM Kit, whose engine translates the agent's words, and LispM UI,
-      # which draws its forms.
-      - uses: actions/checkout@v7
-        with:
-          repository: LispMachineLab/lispm-kit
-          path: .deps/lispm-kit
+      # LispM UI (including Kit), which translates the agent's words and draws its forms.
       - uses: actions/checkout@v7
         with:
           repository: LispMachineLab/lispm-ui
@@ -37,6 +32,6 @@ jobs:
         with:
           version: ${{ matrix.emacs }}
       - name: Test
-        run: make test compile LISPM_AGENT=.deps/lispm-agent/lisp LISPM_KIT=.deps/lispm-kit LISPM_UI=.deps/lispm-ui
+        run: make test compile LISPM_AGENT=.deps/lispm-agent/lisp LISPM_UI=.deps/lispm-ui
       - name: Check the bridge
         run: python3 -m py_compile bin/emacs-mcp
